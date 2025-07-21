@@ -34,3 +34,9 @@ tornado==6.5.1
 typing_extensions==4.14.1
 tzdata==2025.2
 urllib3==2.5.0
+streamlit
+pillow
+fastapi
+uvicorn
+requests
+ultralytics
