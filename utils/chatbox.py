@@ -3,12 +3,14 @@ import os
 import requests
 import streamlit as st
 
+# gemini_model = "gemini-1.5-flash"
+gemini_model = "gemini-2.5-pro"
 
 def respond_to_chat(user_msg):
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
         response = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}",
             headers={"Content-Type": "application/json"},
             json={
                 "contents": [
@@ -20,7 +22,8 @@ def respond_to_chat(user_msg):
         )
         data = response.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
+    except Exception as e:
+        st.error(f"⚠️ Gemini API error: {e}")
         return "⚠️ Sorry, I couldn't reach the Gemini server."
 
 def show_chatbox():

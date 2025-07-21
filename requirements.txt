@@ -40,3 +40,6 @@ fastapi
 uvicorn
 requests
 ultralytics
+sqlalchemy
+dotenv
+asyncpg
