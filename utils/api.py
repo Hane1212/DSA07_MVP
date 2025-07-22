@@ -84,6 +84,10 @@ class DetectionIn(BaseModel):
     num_objects_corrected: Optional[int] = 0
     annotated_by_user: bool = False
     annotator_id: Optional[str] = None
+    fruit_type: Optional[str] = None
+    expected_revenue: Optional[float] = None
+    market_price: Optional[float] = None
+    estimated_workload: Optional[float] = None
 
 @fastapi_app.post("/save")
 async def save_detection(data: DetectionIn, db: AsyncSession = Depends(get_db)):
@@ -98,7 +102,11 @@ async def save_detection(data: DetectionIn, db: AsyncSession = Depends(get_db)):
         num_objects_model=data.num_objects_model,
         num_objects_corrected=data.num_objects_corrected,
         annotated_by_user=data.annotated_by_user,
-        annotator_id=data.annotator_id
+        annotator_id=data.annotator_id,
+        fruit_type=data.fruit_type,
+        expected_revenue=data.expected_revenue,
+        market_price=data.market_price,
+        estimated_workload=data.estimated_workload
     )
     db.add(new_record)
     await db.commit()

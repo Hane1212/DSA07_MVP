@@ -47,6 +47,13 @@ with tab_detection:
                     st.write(f"⏱️ Detection time: {result['detection_time']} sec")
                     st.image(f"output/images/{file.name}", caption="Prediction Output", width=int(image.width * 0.3))
 
+                    # NEW: Additional metrics
+                 #  st.markdown(f"🧠 **Fruit Type (estimated)**: `{result['fruit_type'].capitalize()}`")
+                    st.markdown(f"🧠 **Fruit Type (estimated)**: `{result.get('fruit_type', 'N/A').capitalize()}`")
+                    st.markdown(f"🛠️ **Estimated Workload**: `{result.get('estimated_workload', 'N/A')} hours`")
+                    st.markdown(f"💰 **Market Price per Fruit**: `${result.get('market_price', 'N/A')}`")
+                    st.markdown(f"📈 **Expected Revenue**: `${result.get('expected_revenue', 'N/A')}`")
+
                 except Exception as detect_err:
                     st.error("Prediction failed!")
                     st.exception(detect_err)

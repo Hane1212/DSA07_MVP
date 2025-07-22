@@ -1,6 +1,6 @@
 data/
-models/
-output/images
+#models/
+#output/images
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

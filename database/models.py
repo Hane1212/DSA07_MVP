@@ -11,7 +11,11 @@ class ImageDetection(Base):
     model_name = Column(String, nullable=False)
     detection_time = Column(Float)
     confidence = Column(Float)
-
+    fruit_type = Column(String, nullable=True)
+    expected_revenue = Column(Float, nullable=True)
+    market_price = Column(Float, nullable=True)
+    estimated_workload = Column(Float, nullable=True)
+    
     # Detection and correction data
     model_predictions = Column(JSON)  # Original model boxes
     user_annotations = Column(JSON)   # Corrected boxes
