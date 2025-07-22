@@ -1,78 +1,120 @@
 import streamlit as st
+import requests
 from PIL import Image
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import uvicorn
 import io
-from PIL import Image
-import time
-import threading
-from ultralytics import YOLO
-import cv2
-import numpy as np
 import os
-from utils.chatbox import show_chatbox
-from utils.api import fastapi_app
-from utils.style import custom_css
+# Removed: numpy, pandas, altair (as dashboard logic moved to _Compare.py)
 
-LOCAL_HOST = "http://localhost:8000/"
+# Import FastAPI app from utils.api.py (Note: We no longer run it from here)
+# from utils.api import fastapi_app # No longer needed for direct import/run
+from utils.style import custom_css
+from utils.detection_utils import draw_boxes_on_image # Only need this for the home page
+
+# IMPORTANT: Use the service name 'fastapi' as defined in docker-compose.yml
+# for inter-container communication.
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://fastapi:8000") 
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Fruit Counter MVP", layout="wide")
-
-# --- PAGE SWITCH FUNCTION (REQUIRES streamlit>=1.12) ---
-def go_to(page_name: str):
-    st.switch_page(f"pages/{page_name}")
-
-def run_fastapi():
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
-
-threading.Thread(target=run_fastapi, daemon=True).start()
+st.set_page_config(page_title="Fruit Detection MVP", layout="wide")
 
 # --- CUSTOM CSS STYLE ---
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# --- Tabs ---
-tab_detection, tab_chat = st.tabs(["🧠 Detection", "💬 AgriBot Chat"])
+# --- Session State Initialization for app.py specific variables ---
+# These are for the main detection page, distinct from compare page's state
+if 'home_predictions' not in st.session_state:
+    st.session_state.home_predictions = None
+if 'home_original_image_bytes' not in st.session_state:
+    st.session_state.home_original_image_bytes = None
+if 'home_current_image_filename' not in st.session_state:
+    st.session_state.home_current_image_filename = None
 
-# --- TAB 1: Detection ---
-with tab_detection:
+# --- Navigation ---
+st.sidebar.title("Navigation")
+# Use st.page_link for navigation to separate pages
+st.sidebar.page_link("app.py", label="🏠 Image Prediction")
+st.sidebar.page_link("pages/_Compare.py", label="📊 Compare Models")
+st.sidebar.page_link("pages/_History.py", label="📜 History (Placeholder)") # Assuming _History.py exists or will be created
+
+# --- Page Rendering Functions for app.py ---
+
+def render_detection_tab():
     st.header("🍌 Fruit Detection")
+    st.markdown("Upload an image and detect fruits using a single selected model.")
 
-    model = st.selectbox("Select Model", ["YOLOv10m", "YOLOv9", "YOLOv8", "FasterCNN"])
-    uploaded_files = st.file_uploader("Upload Images", type=["jpg", "png"], accept_multiple_files=True)
+    model_choice = st.selectbox(
+        "Select Model",
+        ["YOLOv10m", "YOLOv9c", "YOLOv10l", "FasterRCNN"], # Added YOLOv10l
+        index=0
+    )
 
-# --- DETECTION (Mock) ---
-import requests
+    uploaded_file = st.file_uploader("Upload Images", type=["jpg", "png"], accept_multiple_files=False)
 
-if uploaded_files and st.button("🔍 Run Detection"):
-    st.subheader("Detection Results")
-    for file in uploaded_files:
-        image = Image.open(file)
-        st.image(image, caption=f"Uploaded: {file.name}", use_container_width=True)
+    if uploaded_file is not None:
+        image_bytes = uploaded_file.getvalue()
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-        # Send image + model to backend
-        with st.spinner(f"Detecting using {model}..."):
-            files = {"file": (file.name, file.getvalue(), "image/png")}
-            data = {"model_name": model}
-            try:
-                response = requests.post(f"{LOCAL_HOST}/predict/", files=files, data=data)
-                result = response.json()
-                st.success(f"✅ {result['fruit_count']} fruits detected.")
-                st.write(f"🔍 Model: {model}")
-                st.write(f"📏 Confidence: {result['confidence'] * 100:.2f}%")
-                st.write(f"⏱️ Detection time: {result['detection_time']} sec")
-                st.image("annotated.jpg", caption="Prediction Output", use_container_width=True)
+        st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+        st.write("")
 
-            except Exception as e:
-                st.error("Prediction failed!")
-                st.exception(e)
+        if st.button("🔍 Run Detection"):
+            with st.spinner(f"Detecting using {model_choice}..."):
+                try:
+                    data = {
+                        "model_names": [model_choice], # Send as a list for single prediction
+                        "image_filename": uploaded_file.name
+                    }
+                    files = {"file": (uploaded_file.name, image_bytes, uploaded_file.type)}
+                    
+                    predict_url = f"{FASTAPI_URL}/predict" 
+                    
+                    response = requests.post(predict_url, data=data, files=files)
+                    response.raise_for_status() 
+                    
+                    predictions = response.json()
+                    st.session_state.home_predictions = predictions # Store for home page
 
+                    st.subheader("Prediction Results:")
 
-# --- TAB 2: Chatbot ---
-with tab_chat:
+                    if model_choice in predictions:
+                        detections = predictions[model_choice]
+                        if detections:
+                            st.write(f"Detected **{len(detections)}** objects:")
+                            for i, det in enumerate(detections):
+                                st.write(f"- Object {i+1}: Label: **{det['label']}**, Score: {det['score']:.2f}")
+                            
+                            img_with_boxes = image.copy()
+                            img_with_boxes = draw_boxes_on_image(img_with_boxes, detections, model_choice)
+                            st.image(img_with_boxes, caption=f"{model_choice} Detections", use_column_width=True)
+                        else:
+                            st.write(f"No objects detected by {model_choice} model.")
+                    elif f"{model_choice}_error" in predictions:
+                        st.error(f"{model_choice} Model Error: {predictions[f'{model_choice}_error']}")
+                    else:
+                        st.warning(f"No results or errors for {model_choice} model.")
+
+                except requests.exceptions.ConnectionError:
+                    st.error(f"Could not connect to FastAPI server at {FASTAPI_URL}. Please ensure the server is running and accessible.")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"An error occurred during prediction: {e}")
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {e}")
+    else:
+        st.info("Please upload an image to get started.")
+
+def render_chat_tab():
     st.header("👩‍🌾 Ask AgriBot")
-    show_chatbox()
-# --- CLOSE DIV ---
-st.markdown("</div>", unsafe_allow_html=True)
+    st.write("This is where the AgriBot chatbot functionality will be implemented.")
+    st.info("Chatbot feature coming soon!")
+
+
+# --- Main Application Logic (app.py) ---
+# Use st.tabs for top-level navigation
+tab_detection, tab_chat = st.tabs(["🧠 Detection", "💬 AgriBot Chat"]) # Removed compare tab from here
+
+with tab_detection:
+    render_detection_tab()
+
+with tab_chat:
+    render_chat_tab()
+
