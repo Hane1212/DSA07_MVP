@@ -1,0 +1,13 @@
+image_id,image_path,predicted_count,corrected_count,model_used,timestamp,boxed_path
+evans_cherry-tree_fruit-close-up-scaled.jpg,temp_evans_cherry-tree_fruit-close-up-scaled.jpg,17,17,YOLOv10l,2025-07-22 04:33:31,
+64b739e2f0e9b.image.jpg,temp_64b739e2f0e9b.image.jpg,21,21,YOLOv10l,2025-07-22 04:46:52,
+64b739e2f0e9b.image.jpg,uploads\64b739e2f0e9b.image.jpg,23,23,YOLOv10l,2025-07-22 05:50:51,
+64b739e2f0e9b.image.jpg,uploads\64b739e2f0e9b.image.jpg,11,11,YOLOv10l,2025-07-22 20:25:55,
+evans_cherry-tree_fruit-close-up-scaled.jpg,uploads\evans_cherry-tree_fruit-close-up-scaled.jpg,12,12,YOLOv10l,2025-07-22 20:31:11,
+evans_cherry-tree_fruit-close-up-scaled.jpg,uploads\evans_cherry-tree_fruit-close-up-scaled.jpg,11,11,YOLOv10l,2025-07-22 20:35:37,
+evans_cherry-tree_fruit-close-up-scaled.jpg,uploads\evans_cherry-tree_fruit-close-up-scaled.jpg,9,9,YOLOv10l,2025-07-22 20:49:29,
+evans_cherry-tree_fruit-close-up-scaled.jpg,uploads\evans_cherry-tree_fruit-close-up-scaled.jpg,13,13,YOLOv10l,2025-07-22 21:00:49,uploads\boxed_evans_cherry-tree_fruit-close-up-scaled.jpg
+evans_cherry-tree_fruit-close-up-scaled.jpg,uploads\evans_cherry-tree_fruit-close-up-scaled.jpg,7,7,YOLOv10l,2025-07-22 21:10:10,uploads\boxed_evans_cherry-tree_fruit-close-up-scaled.jpg
+evans_cherry-tree_fruit-close-up-scaled.jpg,uploads\evans_cherry-tree_fruit-close-up-scaled.jpg,6,5,YOLOv10l,2025-07-22 21:18:47,uploads\boxed_evans_cherry-tree_fruit-close-up-scaled.jpg
+64b739e2f0e9b.image.jpg,uploads\64b739e2f0e9b.image.jpg,4,3,YOLOv10l,2025-07-22 22:07:14,uploads\boxed_64b739e2f0e9b.image.jpg
+evans_cherry-tree_fruit-close-up-scaled.jpg,uploads\evans_cherry-tree_fruit-close-up-scaled.jpg,5,3,YOLOv10l,2025-07-22 22:10:09,uploads\boxed_evans_cherry-tree_fruit-close-up-scaled.jpg
