@@ -5,15 +5,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel
 from typing import List, Optional
-
+from PIL import Image
 from database.config import get_db, Base, async_engine
 from database.models import ImageDetection
-
 import time
 import cv2
 import numpy as np
+import io
 from ultralytics import YOLO
+from torchvision.transforms import functional as F
+import torch
 import os
+from utils import utils
 
 fastapi_app = FastAPI()
 
@@ -26,44 +29,143 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  
+ROOT_DIR = os.path.dirname(BASE_DIR) 
+
+NUM_CLASSES = 2  # 1 class: apple + 1 background
+models = {
+    "YOLOv10m": YOLO("./models/yolov10m.pt"),
+    "YOLOv9": YOLO(os.path.join("./models/yolov9c.pt")),
+    "fasterRCNNmobile": utils.load_faster_rcnn_mobilenet(NUM_CLASSES, os.path.join(ROOT_DIR,"models/fasterrcnn_mobilenet_fpn.pth")),
+    "fasterRCNNresNet50": utils.load_faster_rcnn_resnet50(NUM_CLASSES, os.path.join(ROOT_DIR,"models/fasterrcnn_resNet50_fpn.pth")),
+}
+
+def get_model(model_name: str):
+    if model_name not in models:
+        print("❌ Invalid model name:", model_name)
+        return JSONResponse(status_code=400, content={"error": "Model not found."})
+    
+    
 # Load model once
 yolo_model = YOLO("./models/yolov10m.pt")
+
+
 
 @fastapi_app.on_event("startup")
 async def on_startup():
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        """Load models and ground truth on startup."""
+    print("Loading models and ground truth on startup...")
+    utils.load_yolo_model("YOLOv10m", "models/yolov10m.pt")
+    utils.load_yolo_model("YOLOv9c", "models/yolov9c.pt")
+    utils.load_yolo_model("YOLOv10l", "models/yolov10l.pt") # Added YOLOv10l model loading
+    utils.load_cnn_resnet50_model()
+    utils.load_ground_truth() # Load ground truth data
+    print("Models and ground truth loading attempt completed.")
 
 # ----------------------------
 # PREDICT endpoint
 # ----------------------------
+# @fastapi_app.post("/predict/")
+# async def predict(file: UploadFile = File(...), model_name: str = Form(...)):
+#     start = time.time()
+#     image_bytes = await file.read()
+#     np_img = np.frombuffer(image_bytes, np.uint8)
+#     image = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+
+#     results = yolo_model(image)[0]
+#     boxes = results.boxes
+#     fruit_count = len(boxes)
+
+#     for box in boxes:
+#         x1, y1, x2, y2 = map(int, box.xyxy[0])
+#         confidence = box.conf[0]
+#         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#         cv2.putText(image, f"{confidence:.2f}", (x1, y1 - 10),
+#                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+#     filename = file.filename
+#     output_path = f"./output/images/{filename}"
+#     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+#     cv2.imwrite(output_path, image)
+
+#     detection_time = round(time.time() - start, 2)
+#     return JSONResponse(content={
+#         "fruit_count": fruit_count,
+#         "confidence": float(boxes[0].conf[0]) if fruit_count > 0 else 0,
+#         "detection_time": detection_time,
+#         "image_path": output_path,
+#         "image_id": filename
+#     })
+
+# General prediction function
 @fastapi_app.post("/predict/")
 async def predict(file: UploadFile = File(...), model_name: str = Form(...)):
+    print("🚀 API Called")
     start = time.time()
-    image_bytes = await file.read()
-    np_img = np.frombuffer(image_bytes, np.uint8)
+    if model_name not in models:
+        return JSONResponse(status_code=400, content={"error": f"Unknown model: {model_name}"})
+
+    model = models[model_name]
+    print(f"🧠 Selected model: {model_name}")
+    contents = await file.read()
+    np_img = np.frombuffer(contents, np.uint8)
     image = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
-
-    results = yolo_model(image)[0]
-    boxes = results.boxes
-    fruit_count = len(boxes)
-
-    for box in boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
-        confidence = box.conf[0]
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(image, f"{confidence:.2f}", (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
     filename = file.filename
+    print(f"📁 Received file: {file.filename}")
+    # --- Prediction based on model type ---
+    results = []
+
+    print("🚀 API call")
+    if "yolo" in model_name.lower():
+        # YOLO expects RGB
+        rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = model(rgb_img)[0]  # Ultralytics Results object
+        boxes = results.boxes
+        fruit_count = len(boxes)
+        annotated = image.copy()
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            confidence = float(box.conf[0])
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(annotated, f"{confidence:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    elif "fasterrcnn" in model_name.lower():
+        print("🚀 API call FasterCNN")
+        # Convert to tensor
+        image_tensor = F.to_tensor(image).unsqueeze(0).to("cpu")
+        model.eval()
+        with torch.no_grad():
+            outputs = model(image_tensor)[0]
+
+        boxes_tensor = outputs['boxes']
+        scores_tensor = outputs['scores']
+        threshold = 0.5
+        keep = scores_tensor > threshold
+        boxes = boxes_tensor[keep]
+        scores = scores_tensor[keep]
+        fruit_count = len(boxes)
+        annotated = image.copy()
+        for i in range(fruit_count):
+            x1, y1, x2, y2 = boxes[i].int().tolist()
+            confidence = float(scores[i])
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cv2.putText(annotated, f"{confidence:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+    else:
+        return JSONResponse(status_code=400, content={"error": f"Unsupported model type: {model_name}"})
+
+    # --- Save image and return result ---
     output_path = f"./output/images/{filename}"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    cv2.imwrite(output_path, image)
+    cv2.imwrite(output_path, annotated)
 
     detection_time = round(time.time() - start, 2)
     return JSONResponse(content={
         "fruit_count": fruit_count,
-        "confidence": float(boxes[0].conf[0]) if fruit_count > 0 else 0,
+        "confidence": float(scores[0]) if fruit_count > 0 and "fasterrcnn" in model_name.lower() else float(boxes[0].conf[0]) if fruit_count > 0 else 0,
         "detection_time": detection_time,
         "image_path": output_path,
         "image_id": filename
@@ -132,3 +234,91 @@ async def get_recent_detections(
     detections = result.scalars().all()
 
     return [d.__dict__ for d in detections]
+
+########################################## COMPARE API ##################################################################
+# ----------------------------
+# COMPARE PAGE
+# ----------------------------
+# --- API Endpoints ---
+
+@fastapi_app.post("/compare")
+async def predict_image(
+    file: UploadFile = File(...),
+    model_names: List[str] = Form(...), # Now accepts a list of model names
+    image_filename: str = Form(...) # Get filename from Streamlit
+):
+    """
+    Endpoint to receive an image and perform fruit detection using specified models.
+    `model_names` can be a single model or a list for comparison.
+    Example: model_names=["YOLOv10m"], model_names=["FasterRCNN"], model_names=["YOLOv10m", "FasterRCNN"]
+    """
+    if file.content_type not in ["image/jpeg", "image/png"]:
+        raise HTTPException(status_code=400, detail="Invalid image format. Only JPEG and PNG are supported.")
+
+    image_data = await file.read()
+    image = Image.open(io.BytesIO(image_data)).convert("RGB")
+
+    results = {}
+
+    # Get ground truth count for the specific image
+    ground_truth_count = utils.ground_truth_counts.get(image_filename, None)
+    results["ground_truth_count"] = ground_truth_count
+    if ground_truth_count is None:
+        print(f"WARNING: No ground truth found for image: {image_filename}")
+
+    for model_name in model_names:
+        if model_name == "YOLOv10m":
+            try:
+                yolo_model_instance = utils.yolo_models.get("YOLOv10m")
+                if yolo_model_instance:
+                    yolo_res = utils.predict_yolo(yolo_model_instance, "YOLOv10m", image)
+                    results["YOLOv10m"] = yolo_res
+                else:
+                    results["YOLOv10m_error"] = "YOLOv10m model not loaded."
+            except HTTPException as e:
+                results["YOLOv10m_error"] = str(e.detail)
+            except Exception as e:
+                results["YOLOv10m_error"] = f"YOLOv10m prediction failed: {e}"
+                print(f"YOLOv10m prediction error: {e}")
+        elif model_name == "YOLOv9c":
+            try:
+                yolo_model_instance = utils.yolo_models.get("YOLOv9c")
+                if yolo_model_instance:
+                    yolo_res = utils.predict_yolo(yolo_model_instance, "YOLOv9c", image)
+                    results["YOLOv9c"] = yolo_res
+                else:
+                    results["YOLOv9c_error"] = "YOLOv9c model not loaded."
+            except HTTPException as e:
+                results["YOLOv9c_error"] = str(e.detail)
+            except Exception as e:
+                results["YOLOv9c_error"] = f"YOLOv9c prediction failed: {e}"
+                print(f"YOLOv9c prediction error: {e}")
+        elif model_name == "YOLOv10l": # Added YOLOv10l
+            try:
+                yolo_model_instance = utils.yolo_models.get("YOLOv10l")
+                if yolo_model_instance:
+                    yolo_res = utils.predict_yolo(yolo_model_instance, "YOLOv10l", image)
+                    results["YOLOv10l"] = yolo_res
+                else:
+                    results["YOLOv10l_error"] = "YOLOv10l model not loaded."
+            except HTTPException as e:
+                results["YOLOv10l_error"] = str(e.detail)
+            except Exception as e:
+                results["YOLOv10l_error"] = f"YOLOv10l prediction failed: {e}"
+                print(f"YOLOv10l prediction error: {e}")
+        elif model_name == "FasterRCNN":
+            try:
+                cnn_res = utils.predict_cnn_resnet50(image) 
+                results["FasterRCNN"] = cnn_res
+            except HTTPException as e:
+                results["FasterRCNN_error"] = str(e.detail)
+            except Exception as e:
+                results["FasterRCNN_error"] = f"FasterRCNN prediction failed: {e}"
+                print(f"FasterRCNN prediction error: {e}")
+        else:
+            print(f"Unknown model requested: {model_name}")
+
+    if not results:
+        raise HTTPException(status_code=400, detail="No valid model type selected or models failed to load/predict.")
+
+    return results

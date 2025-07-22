@@ -43,3 +43,6 @@ ultralytics
 sqlalchemy
 dotenv
 asyncpg
+torch
+torchvision
+fpdf

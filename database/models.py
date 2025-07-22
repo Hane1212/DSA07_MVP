@@ -6,7 +6,8 @@ class ImageDetection(Base):
     __tablename__ = "image_detections"
 
     id = Column(Integer, primary_key=True, index=True)
-    image_id = Column(String, unique=True, nullable=False)
+    # image_id = Column(String, unique=True, nullable=False)
+    image_id = Column(String, nullable=False)
     image_path = Column(String, nullable=False)
     model_name = Column(String, nullable=False)
     detection_time = Column(Float)

@@ -20,6 +20,9 @@ def go_to(page_name: str):
 # --- CUSTOM CSS STYLE ---
 st.markdown(custom_css, unsafe_allow_html=True)
 
+# --- Navigation ---
+st.sidebar.title("Navigation")
+st.sidebar.page_link("pages/_Compare.py", label="📊 Compare Models")
 # --- Tabs ---
 tab_detection, tab_chat, tab_his = st.tabs(["🧠 Detection", "💬 AgriBot Chat", "🧾 History / Logs"])
 
@@ -27,7 +30,7 @@ tab_detection, tab_chat, tab_his = st.tabs(["🧠 Detection", "💬 AgriBot Chat
 with tab_detection:
     st.header("🍌 Fruit Detection")
 
-    model = st.selectbox("Select Model", ["YOLOv10m", "YOLOv9", "YOLOv8", "FasterCNN"])
+    model = st.selectbox("Select Model", ["YOLOv10m", "YOLOv9", "fasterRCNNmobile", "fasterRCNNresNet50"])
     uploaded_files = st.file_uploader("Upload Images", type=["jpg", "png"], accept_multiple_files=True)
 
     if uploaded_files and st.button("🔍 Run Detection"):
@@ -75,6 +78,7 @@ with tab_chat:
 with tab_his:
     st.subheader("📜 Detection History")
     utils.show_detection_history()
+
 
 # --- CLOSE DIV ---
 st.markdown("</div>", unsafe_allow_html=True)
