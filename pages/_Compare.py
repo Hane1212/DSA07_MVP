@@ -31,10 +31,21 @@ if 'compare_metrics_df_for_pdf' not in st.session_state:
 if 'compare_page_view' not in st.session_state:
     st.session_state.compare_page_view = 'selection' # 'selection' or 'dashboard'
 
+# --- Helper to get auth headers (copied from app.py for consistency) ---
+def get_auth_headers():
+    # Access session state from the main app.py
+    if st.session_state.get('logged_in', False) and st.session_state.get('auth_token', ""):
+        return {"Authorization": f"Bearer {st.session_state.auth_token}"}
+    return {}
+
 def render_compare_selection_page():
     st.title("⚖️ Model Comparison")
     st.markdown("Select two models and an image to compare their detection performance.")
 
+    if not st.session_state.get('logged_in', False):
+        st.warning("Please log in via the 'Authentication' tab to use the comparison feature.")
+        return
+    
     # Model selection dropdowns
     available_models = ["YOLOv10m", "YOLOv9c", "YOLOv10l", "FasterRCNN"] # Added YOLOv10l
     
@@ -82,7 +93,7 @@ def render_compare_selection_page():
                     
                     predict_url = f"{FASTAPI_URL}/predict"
                     
-                    response = requests.post(predict_url, data=data, files=files)
+                    response = requests.post(predict_url, data=data, files=files, headers=get_auth_headers())
                     response.raise_for_status() 
                     
                     predictions = response.json()
@@ -155,14 +166,19 @@ def render_compare_selection_page():
                     df_metrics = pd.DataFrame(metrics_data)
                     st.session_state.compare_metrics_df_for_pdf = df_metrics # Store for dashboard and PDF
 
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code == 401:
+                        st.error("Authentication required. Please log in via the 'Authentication' tab.")
+                    elif e.response.status_code == 403:
+                        st.error("You do not have permission to perform this action.")
+                    else:
+                        st.error(f"Comparison failed: {e.response.json().get('detail', 'Unknown error')}")
                 except requests.exceptions.ConnectionError:
                     st.error(f"Could not connect to FastAPI server at {FASTAPI_URL}. Please ensure the server is running.")
-                except requests.exceptions.RequestException as e:
-                    st.error(f"An error occurred during prediction: {e}")
                 except Exception as e:
                     st.error(f"An unexpected error occurred: {e}")
-            # After prediction, if successful, display the dashboard button
-            # This reruns the script, and the dashboard button will be rendered outside this 'if' block
+            
+            # After prediction, if successful, transition to dashboard view
             st.session_state.compare_page_view = 'dashboard'
             st.rerun() # Trigger a rerun to show the dashboard
     else:
