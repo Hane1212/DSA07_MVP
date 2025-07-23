@@ -110,9 +110,9 @@ def show_estimate_for_file(file, result):
     market_price = get_crop_price(crop_name)
 
     # --- User Inputs ---
-    avg_weight = st.number_input("Avg fruit weight (g)", 50, 500, 150)
-    tree_count = st.number_input("Number of trees", 1, 10000, 100)
-    fruit_count = len(detections)
+    avg_weight = st.number_input("Avg fruit weight (g)", 50, 500, 150, key=f"avg_weight_{file.name}")
+    tree_count = st.number_input("Number of trees", 1, 10000, 100, key=f"tree_count_{file.name}")
+    fruit_count = len(detections) if detections else st.number_input( "Fruit count (manual)", value=20, key=f"fruit_count_{file.name}")
 
     # --- Yield & Revenue Calculation ---
     estimated_yield_kg = (fruit_count * avg_weight * tree_count) / 1000
