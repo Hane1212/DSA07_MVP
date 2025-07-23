@@ -6,6 +6,11 @@ import streamlit as st
 # gemini_model = "gemini-1.5-flash"
 gemini_model = "gemini-2.5-pro"
 
+"""
+Author: Huong TA
+Date: 2025-07-21
+Description: call External API for chatbox
+"""
 def respond_to_chat(user_msg):
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
@@ -26,6 +31,12 @@ def respond_to_chat(user_msg):
         st.error(f"⚠️ Gemini API error: {e}")
         return "⚠️ Sorry, I couldn't reach the Gemini server."
 
+
+"""
+Author: Huong TA
+Date: 2025-07-21
+Description: Show chatbox in chatbox tab
+"""
 def show_chatbox():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = [

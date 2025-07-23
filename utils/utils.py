@@ -4,31 +4,90 @@ import pandas as pd
 import torchvision
 import torch
 import io
+import cv2
 from fpdf import FPDF
 from PIL import Image, ImageDraw, ImageFont
-
+from io import BytesIO
+from streamlit_cropper import st_cropper
+import numpy as np
 
 LOCAL_HOST = "http://fastapi:8000/"
 
-def run_detection_api(file, model_name):
-    """
-    Sends an image and model name to the /predict/ endpoint.
-    """
-    print(f"📤 Sending request to backend with model = {model_name}")
-    files = {"file": (file.name, file.getvalue(), "image/png")}
-    data = {"model_name": model_name}
-    try:
-        response = requests.post(f"{LOCAL_HOST}/predict/", files=files, data=data)
-        print(f"✅ Response status code: {response.status_code}")
-        print(f"🔁 Response content: {response.text[:300]}")  
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"❌ Error calling API: {e}")
-        raise
+"""
+Author: Huong TA
+Date: 2025-07-22
+Description: Call predict API 
+"""
+def run_detection_api(uploaded_files, model_name):
+    if uploaded_files and st.button("🔍 Run Detection"):
+        st.subheader("Detection Results")
+        for i, file in enumerate(uploaded_files):
+            files = {"file": (file.name, file.getvalue(), "image/png")}
+            data = {"model_name": model_name}
+            image = Image.open(file)
+            with st.spinner(f"Detecting using {model_name}..."):
+                try:
+                    response = requests.post(f"{LOCAL_HOST}/predict/", files=files, data=data)
+                    response.raise_for_status()
+                    result = response.json()
+                    result['model_name'] = model_name
+                    st.session_state[f"result_{file.name}"] = result
+                    st.session_state[f"file_{file.name}"] = file
+                    st.session_state[f"image_{file.name}"] = image
+                    st.session_state[f"predicted_image_{file.name}"] = f"output/images/{file.name}"
+                    st.success(f"✅ {result['fruit_count']} fruits detected.")
+                except Exception as detect_err:
+                    st.error("Prediction failed!")
+                    st.exception(detect_err)
 
 
-def save_detection_api(result, model_name):
+def display_detection_results(uploaded_files):
+    for i, file in enumerate(uploaded_files):
+        result_key = f"result_{file.name}"
+        if result_key in st.session_state:
+            result = st.session_state[result_key]
+            image_path = st.session_state.get(f"predicted_image_{file.name}", None)
+            if image_path:
+                st.image(image_path, caption=f"🖼️ Prediction: {file.name}", width=300)
+
+            st.write(f"🔍 Model: {result['model_name']}")
+            st.write(f"📏 Confidence: {result['confidence']*100:.2f}%")
+            st.write(f"⏱️ Detection time: {result['detection_time']} sec")
+            edit_count_number(file, result, unique_prefix=f"row_{i}")
+
+
+def edit_count_number(file, result, unique_prefix=""):
+    safe_key = f"{unique_prefix}_{file.name}"  # Make key globally unique
+    edit_flag_key = f"edit_mode_enabled_{safe_key}"
+    input_key = f"input_{safe_key}"
+    confirm_key = f"confirm_edit_{safe_key}"
+    corrected_key = f"corrected_count_{safe_key}"
+
+
+    if st.button(f"✏️ Edit number of fruit", key=f"edit_btn_{safe_key}"):
+        st.session_state[edit_flag_key] = True
+
+    if st.session_state.get(edit_flag_key, False):
+        new_count = st.number_input(
+            f"📝 Corrected number of fruits for {file.name}",
+            min_value=0,
+            value=result['fruit_count'],
+            key=input_key
+        )
+
+        if st.button(f"✅ Confirm", key=confirm_key):
+            st.session_state[corrected_key] = new_count
+            result["num_objects_corrected"] = new_count
+            result["annotated_by_user"] = True
+            st.success(f"Confirmed: corrected count = {new_count}")
+
+
+"""
+Author: Huong TA
+Date: 2025-07-22
+Description: Call save API to save data to DB 
+"""
+def save_detection_api(result, model_name, file):
     """
     Sends detection metadata to the /save endpoint.
     """
@@ -42,8 +101,8 @@ def save_detection_api(result, model_name):
         "model_predictions": result.get("model_predictions", []),
         "user_annotations": [],
         "num_objects_model": result["fruit_count"],
-        "num_objects_corrected": 0,
-        "annotated_by_user": False,
+        "num_objects_corrected": result.get("num_objects_corrected", 0),
+        "annotated_by_user": result.get("annotated_by_user", False),
         "annotator_id": None
     }
 
@@ -53,6 +112,11 @@ def save_detection_api(result, model_name):
     return response.json()
 
 
+"""
+Author: Huong TA
+Date: 2025-07-22
+Description: call detections API to get data from DB 
+"""
 def show_detection_history():
     with st.form("filter_form"):
         image_filter = st.text_input("🔍 Filter by image name (partial match)")
@@ -101,7 +165,11 @@ def show_detection_history():
             st.exception(e)
 
 
-
+"""
+Author: Huong TA
+Date: 2025-07-22
+Description: Load faster_rcnn_resnet50 model
+"""
 NUM_CLASSES = 2  # 1 class: apple + 1 background
 def load_faster_rcnn_resnet50(num_classes=NUM_CLASSES, path="./model/fasterrcnn_resNet50_fpn.pth"):
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=False)
@@ -115,6 +183,11 @@ def load_faster_rcnn_resnet50(num_classes=NUM_CLASSES, path="./model/fasterrcnn_
     model.eval()
     return model
 
+"""
+Author: Huong TA
+Date: 2025-07-22
+Description: load_faster_rcnn_mobilenet
+"""
 def load_faster_rcnn_mobilenet(num_classes=NUM_CLASSES, path="./model/fasterrcnn_mobilenet_fpn.pth"):
     model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=False)
     in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -124,8 +197,146 @@ def load_faster_rcnn_mobilenet(num_classes=NUM_CLASSES, path="./model/fasterrcnn
     model.eval()
     return model
 
+"""
+Author: Huong TA
+Date: 2025-07-21
+Description: Save result to DB
+"""
+def save_to_DB(uploaded_files, model_name):
+    if uploaded_files:
+        st.subheader("Save Results to Database")
+        for i, file in enumerate(uploaded_files):
+            result_key = f"result_{file.name}"
+            if result_key in st.session_state:
+                result = st.session_state[result_key]
+                if st.button(f"💾 Save", key=f"save-btn-{i}"):
+                    try:
+                        save_detection_api(result, model_name, file)
+                        st.success(f"✅ {file.name} saved to database.")
+                    except Exception as save_err:
+                        st.error(f"❌ Failed to save {file.name}.")
+                        st.exception(save_err)
+
+
+"""
+Author: Vinay Gaddam
+Date: 2025-07-23
+Description: 
+"""
+# --- Gamma Correction ---
+def adjust_gamma(image, gamma=1.0):
+    inv_gamma = 1.0 / gamma
+    table = np.array([(i / 255.0) ** inv_gamma * 255 for i in np.arange(256)]).astype("uint8")
+    return cv2.LUT(image, table)
+
+def handle_edit_image(uploaded_files):
+    for file in uploaded_files:
+        file_key = f"image_bytes_{file.name}"
+        file_bytes = st.session_state[file_key]  # Already stored
+
+        pil_image = Image.open(BytesIO(file_bytes)).convert("RGB")
+        image_np = np.array(pil_image)
+
+        st.markdown(f"### ✏️ Editing: {file.name}")
+        col1, col2 = st.columns(2)
+
+        # --- Column 1: Brightness ---
+        with col1:
+            st.markdown("#### 🔆 Brightness Adjustment")
+            brightness = st.slider(f"Brightness", 0.5, 2.5, 1.0, 0.1, key=f"brightness_slider_{file.name}")
+            bright_np = adjust_gamma(image_np, gamma=brightness)
+            bright_pil = Image.fromarray(bright_np)
+            display_width = int(pil_image.width * 0.3)
+            st.image(bright_pil, caption="Preview: Brightness Adjusted", width=display_width)
+
+        # --- Column 2: Cropping ---
+        with col2:
+            st.markdown("#### ✂️ Crop Image (interactive)")
+            crop_col1, crop_col2 = st.columns([2, 1])  # Wider for cropper, narrower for preview
+
+            with crop_col1:
+                # Use bright_pil directly (ensure it’s a valid PIL Image)
+                cropped_image = st_cropper(
+                    bright_pil,
+                    realtime_update=True,
+                    box_color="#FF4B4B",
+                    aspect_ratio=None,
+                    key=f"cropper_{file.name}"
+                )
+
+            with crop_col2:
+                if cropped_image:
+                    st.image(cropped_image, caption="Preview: Cropped", width=int(bright_pil.width * 0.3))
+
+        # --- Apply Combined Changes ---
+        if st.button(f"✅ Apply Changes", key=f"apply_all_{file.name}"):
+            cropped_np = np.array(cropped_image.convert("RGB"))
+            os.makedirs("uploads", exist_ok=True)
+            image_path = os.path.join("uploads", file.name)
+            cv2.imwrite(image_path, cv2.cvtColor(cropped_np, cv2.COLOR_RGB2BGR))
+
+            st.session_state[f"final_{file.name}"] = cropped_image
+            st.session_state[f"path_{file.name}"] = image_path
+
+            st.success(f"✅ Edits applied and saved for {file.name}")
+
+
+
+"""
+Author: Huong TA
+Date: 2025-07-20
+Description: Show Main screen
+"""
+def show_fruit_detection():
+    col1, _, _ = st.columns([1, 1, 1])
+    with col1:
+        model = st.selectbox("Select Model", ["YOLOv10m", "YOLOv9", "fasterRCNNmobile", "fasterRCNNresNet50"])
+
+    col2, _, _ = st.columns([1, 1, 1])
+    with col2:
+        uploaded_files = st.file_uploader("Upload Images", type=["jpg", "png"], accept_multiple_files=True)
+
+
+    if uploaded_files:
+        # Save image bytes once in session_state
+        for file in uploaded_files:
+            file_key = f"image_bytes_{file.name}"
+            if file_key not in st.session_state:
+                st.session_state[file_key] = file.read()
+            # Edit button logic
+            edit_key = f"edit_enabled_{file.name}"
+            if st.button(f"✏️ Edit", key=f"edit_btn_{file.name}"):
+                st.session_state[edit_key] = True
+
+        # Handle editing if requested
+        files_to_edit = [f for f in uploaded_files if st.session_state.get(f"edit_enabled_{f.name}", False)]
+        if files_to_edit:
+            handle_edit_image(files_to_edit)
+            
+    final_files = []
+    for file in uploaded_files:
+        edit_key = f"edit_enabled_{file.name}"
+        if st.session_state.get(edit_key):
+            final_img = st.session_state.get(f"final_{file.name}")
+            if final_img:
+                # Convert edited PIL image back to BytesIO with same name
+                img_buffer = BytesIO()
+                final_img.save(img_buffer, format="PNG")
+                img_buffer.seek(0)
+                img_buffer.name = file.name  # mimic UploadFile
+                final_files.append(img_buffer)
+            else:
+                final_files.append(file)  # fallback
+        else:
+            final_files.append(file)
+    
+    # Call detection and save
+    run_detection_api(final_files, model)
+    display_detection_results(final_files)
+    save_to_DB(final_files, model_name=model)
+
 # ----------------------------------------
-# API for compare page
+# API for compare page - Bhagyasri Parupudi
 # ----------------------------------------
 from fastapi import HTTPException, Form
 from torchvision.models.detection import (

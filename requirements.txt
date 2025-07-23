@@ -46,3 +46,4 @@ asyncpg
 torch
 torchvision
 fpdf
+streamlit_cropper

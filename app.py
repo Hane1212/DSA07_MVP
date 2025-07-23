@@ -5,9 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from PIL import Image
 import numpy as np
-import requests
 from utils.chatbox import show_chatbox
 from utils.style import custom_css
+from utils import estimate
 from utils import utils
 
 # --- PAGE CONFIG ---
@@ -20,54 +20,27 @@ def go_to(page_name: str):
 # --- CUSTOM CSS STYLE ---
 st.markdown(custom_css, unsafe_allow_html=True)
 
+# --- Session State Initialization ---
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'username' not in st.session_state:
+    st.session_state.username = ""
+if 'user_role' not in st.session_state:
+    st.session_state.user_role = "" # "admin", "annotator", "viewer"
+if 'auth_token' not in st.session_state:
+    st.session_state.auth_token = ""
+
 # --- Navigation ---
 st.sidebar.title("Navigation")
 st.sidebar.page_link("pages/_Compare.py", label="📊 Compare Models")
+st.sidebar.page_link("pages/_Login.py", label="🔑 User Authentication")
 # --- Tabs ---
-tab_detection, tab_chat, tab_his = st.tabs(["🧠 Detection", "💬 AgriBot Chat", "🧾 History / Logs"])
+tab_detection, tab_chat, tab_his, tab_est = st.tabs(["🧠 Detection", "💬 AgriBot Chat", "🧾 History / Logs", "📈 Estimate"])
 
 # --- TAB 1: Detection ---
 with tab_detection:
-    st.header("🍌 Fruit Detection")
-
-    model = st.selectbox("Select Model", ["YOLOv10m", "YOLOv9", "fasterRCNNmobile", "fasterRCNNresNet50"])
-    uploaded_files = st.file_uploader("Upload Images", type=["jpg", "png"], accept_multiple_files=True)
-
-    if uploaded_files and st.button("🔍 Run Detection"):
-        st.subheader("Detection Results")
-        for i, file in enumerate(uploaded_files):
-            image = Image.open(file)
-            st.image(image, caption=f"Uploaded: {file.name}", width=int(image.width * 0.3))
-
-            with st.spinner(f"Detecting using {model}..."):
-                try:
-                    result = utils.run_detection_api(file, model)
-                    st.session_state[f"result_{file.name}"] = result  # ✅ store result by filename
-
-                    st.success(f"✅ {result['fruit_count']} fruits detected.")
-                    st.write(f"🔍 Model: {model}")
-                    st.write(f"📏 Confidence: {result['confidence'] * 100:.2f}%")
-                    st.write(f"⏱️ Detection time: {result['detection_time']} sec")
-                    st.image(f"output/images/{file.name}", caption="Prediction Output", width=int(image.width * 0.3))
-
-                except Exception as detect_err:
-                    st.error("Prediction failed!")
-                    st.exception(detect_err)
-
-    # ✅ Now, after detection, show Save buttons
-    if uploaded_files:
-        st.subheader("Save Results to Database")
-        for i, file in enumerate(uploaded_files):
-            result_key = f"result_{file.name}"
-            if result_key in st.session_state:
-                result = st.session_state[result_key]
-                if st.button(f"💾 Save", key=f"save-btn-{i}"):
-                    try:
-                        save_response = utils.save_detection_api(result, model)
-                        st.success(f"✅ {file.name} saved to database.")
-                    except Exception as save_err:
-                        st.error(f"❌ Failed to save {file.name}.")
-                        st.exception(save_err)
+    st.header("Fruit Detection")
+    utils.show_fruit_detection()
 
 # --- TAB 2: Chatbot ---
 with tab_chat:
@@ -78,6 +51,18 @@ with tab_chat:
 with tab_his:
     st.subheader("📜 Detection History")
     utils.show_detection_history()
+
+with tab_est:
+    st.subheader("🧮 Estimate")
+    for key in st.session_state:
+        if key.startswith("result_"):
+            file_name = key.replace("result_", "")
+            result = st.session_state[key]
+            uploaded_file = st.session_state.get(f"file_{file_name}")
+            image = st.session_state.get(f"image_{file_name}")
+            
+            if uploaded_file and image:
+                estimate.show_estimate_for_file(uploaded_file, result)
 
 
 # --- CLOSE DIV ---

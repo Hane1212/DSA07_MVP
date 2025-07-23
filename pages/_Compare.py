@@ -12,6 +12,11 @@ import os
 # Import utility functions
 from utils import utils
 
+"""
+Author: Bhagyasri Parupudi
+Date: 2025-07-22
+Description: Show compare page
+"""
 # IMPORTANT: Use the service name 'fastapi' as defined in docker-compose.yml
 # for inter-container communication.
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://fastapi:8000") 
@@ -104,7 +109,7 @@ def render_compare_selection_page():
                             st.write(f"Detected **{len(model1_detections)}** objects.")
                             img_with_model1_boxes = original_image.copy()
                             img_with_model1_boxes = utils.draw_boxes_on_image(img_with_model1_boxes, model1_detections, model1_name)
-                            st.image(img_with_model1_boxes, caption=f"{model1_name} Detections", use_column_width=True)
+                            st.image(img_with_model1_boxes, caption=f"{model1_name} Detections", width=int(img_with_model1_boxes.width * 0.3))
                             combined_img = utils.draw_boxes_on_image(combined_img, model1_detections, model1_name)
                         else:
                             st.write(f"No objects detected by {model1_name} model.")
@@ -121,7 +126,7 @@ def render_compare_selection_page():
                             st.write(f"Detected **{len(model2_detections)}** objects.")
                             img_with_model2_boxes = original_image.copy()
                             img_with_model2_boxes = utils.draw_boxes_on_image(img_with_model2_boxes, model2_detections, model2_name)
-                            st.image(img_with_model2_boxes, caption=f"{model2_name} Detections", use_column_width=True)
+                            st.image(img_with_model2_boxes, caption=f"{model2_name} Detections", width=int(img_with_model2_boxes.width * 0.3))
                             combined_img = utils.draw_boxes_on_image(combined_img, model2_detections, model2_name)
                         else:
                             st.write(f"No objects detected by {model2_name} model.")
@@ -229,7 +234,8 @@ def render_comparison_dashboard_page():
 
         # Display combined image if available
         if st.session_state.compare_combined_img_for_pdf:
-            st.image(st.session_state.compare_combined_img_for_pdf, caption="Combined Detections", use_container_width=True)
+            img_pdf = st.session_state.compare_combined_img_for_pdf
+            st.image(img_pdf, caption="Combined Detections", width=int(img_pdf.width * 0.5))
             st.markdown("---")
 
         st.markdown("### Detailed Comparison")
