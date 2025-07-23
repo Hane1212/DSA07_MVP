@@ -38,3 +38,4 @@ opencv-python-headless # Added: For cv2 operations
 fpdf2
 python-jose # Added for JWT handling (even if simulated for now)
 twilio # Added for SMS functionality
+python-dotenv # Added for environment variable management

@@ -4,6 +4,8 @@ from PIL import Image
 import io
 import os
 import pandas as pd
+from dotenv import load_dotenv
+load_dotenv()
 
 # Removed: numpy, altair (as dashboard logic moved to _Compare.py)
 
@@ -37,7 +39,20 @@ def get_auth_headers():
     if st.session_state.logged_in and st.session_state.auth_token:
         return {"Authorization": f"Bearer {st.session_state.auth_token}"}
     return {}
-
+def get_weather(lat, lon):
+    api_key = os.getenv("OPENWEATHER_API_KEY")
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}"
+    try:
+        res = requests.get(url)
+        if res.status_code == 200:
+            data = res.json()
+            temp = data['main']['temp'] - 273.15  # Kelvin → Celsius
+            humidity = data['main']['humidity']
+            return temp, humidity
+        else:
+            return None, None
+    except:
+        return None, None
 # --- Page Rendering Functions ---
 
 def render_authentication_tab():
@@ -195,11 +210,33 @@ def render_detection_tab():
                                st.markdown("---")
                                st.subheader("📈 Estimated Yield Forecast")                               
                                fruit_count = len(detections)
-                               avg_fruit_weight_grams = st.number_input(f"Avg fruit weight (g) for {uploaded_file.name}", min_value=50, max_value=500, value=150, key=f"weight_{uploaded_file.name}")
-                               num_trees = st.number_input(f"Number of trees for {uploaded_file.name}", min_value=1, value=100, key=f"trees_{uploaded_file.name}")
+                               st.markdown("### 🌍 Weather-Based Yield Estimation")
 
-                               estimated_yield_kg = (fruit_count * avg_fruit_weight_grams * num_trees) / 1000
-                               st.success(f"Estimated Yield for {uploaded_file.name}: {estimated_yield_kg:.2f} kg")
+                               col1, col2 = st.columns(2)
+                               with col1:
+                                   lat = st.number_input("Latitude", value=12.9716, key=f"lat_{uploaded_file.name}")
+                               with col2:
+                                   lon = st.number_input("Longitude", value=77.5946, key=f"lon_{uploaded_file.name}")
+
+                               temp, humidity = get_weather(lat, lon)
+
+                               if temp is not None:
+                                   st.info(f"🌡️ Temperature: {temp:.2f}°C | 💧 Humidity: {humidity}%")
+
+                                   adjustment = 1.0
+                                   if temp > 35 or humidity < 30:
+                                       adjustment -= 0.2
+                                   elif temp < 10:
+                                       adjustment -= 0.1
+
+                                   avg_fruit_weight_grams = st.number_input(f"Avg fruit weight (g)", min_value=50, max_value=500, value=150, key=f"weight_{uploaded_file.name}")
+                                   num_trees = st.number_input(f"Number of trees", min_value=1, value=100, key=f"trees_{uploaded_file.name}")
+
+                                   estimated_yield_kg = (fruit_count * avg_fruit_weight_grams * num_trees * adjustment) / 1000
+                                   st.success(f"✅ Estimated Yield: {estimated_yield_kg:.2f} kg (adjusted for weather)")
+                               else:
+                                   st.warning("⚠️ Could not fetch weather data. Check API key or network.")
+
                                # --- SMS ALERT FEATURE ---
                                st.markdown("---")
                                st.subheader("📱 Send SMS Alert")
