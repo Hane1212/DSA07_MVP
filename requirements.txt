@@ -47,3 +47,4 @@ torch
 torchvision
 fpdf
 streamlit_cropper
+plotly>=5.0.0
