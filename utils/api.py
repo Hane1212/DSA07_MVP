@@ -18,9 +18,15 @@ import torch
 import os
 from utils import utils, authen
 import streamlit as st
+import sys
 from torchvision import transforms as T
+from utils.estimate import estimate_fruit_size, estimate_ripeness, estimate_harvest_date
+from utils.estimate import get_crop_price, calculate_revenue
+from utils.enhanced_quality import ExportQualityAssessment
+from utils.enhanced_pricing import PriceForecastingSystem
 
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 fastapi_app = FastAPI()
 
@@ -90,6 +96,11 @@ async def predict(file: UploadFile = File(...), model_name: str = Form(...)):
     fruit_count = 0
     annotated = image.copy()
 
+    # --- Save original image first for ripeness estimation ---
+    os.makedirs("./temp/images", exist_ok=True)
+    temp_image_path = f"./temp/images/{filename}"
+    cv2.imwrite(temp_image_path, image)
+
     # --- YOLO ---
     if "yolo" in model_name.lower():
         rgb_img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -153,6 +164,32 @@ async def predict(file: UploadFile = File(...), model_name: str = Form(...)):
     else:
         return JSONResponse(status_code=400, content={"error": f"Unsupported model type: {model_name}"})
 
+    # --- Estimation Logic (moved after detection processing) ---
+    single_fruit_weight_grams = 150  # or 180, as you prefer
+    predicted_yield_kg = (fruit_count * single_fruit_weight_grams) / 1000
+
+    # Get crop price and calculate revenue
+    price = get_crop_price("Apple")  # or use dynamic crop name from frontend
+    if price is None:
+        price = 45.50  # Default price if API fails
+    revenue = calculate_revenue(predicted_yield_kg, price)
+
+    # Estimate fruit characteristics
+    bboxes = [(d["box"][0], d["box"][1], d["box"][2], d["box"][3]) for d in detections]
+    size = estimate_fruit_size(bboxes) if bboxes else "Unknown"
+    ripeness = estimate_ripeness(temp_image_path) if os.path.exists(temp_image_path) else "Unknown"
+    harvest_date = estimate_harvest_date(ripeness)
+
+    # Initialize enhanced systems AFTER temp_image_path is created
+    quality_assessor = ExportQualityAssessment()
+    price_forecaster = PriceForecastingSystem()
+    
+    # Enhanced quality assessment
+    quality = quality_assessor.assess_export_quality(detections, temp_image_path)
+    
+    # Enhanced price forecasting
+    forecasting = price_forecaster.forecast_prices("Apple", predicted_yield_kg, quality.grade)
+
     # --- Save annotated image ---
     output_path = f"./output/images/{filename}"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -161,15 +198,39 @@ async def predict(file: UploadFile = File(...), model_name: str = Form(...)):
     detection_time = round(time.time() - start, 2)
     avg_conf = float(np.mean([d["score"] for d in detections])) if detections else 0.0
 
+    # Update the return JSON to include enhanced data
     return JSONResponse(content={
         "fruit_count": fruit_count,
         "confidence": avg_conf,
         "detection_time": detection_time,
         "image_path": output_path,
         "image_id": filename,
-        "detections": detections  # ✅ Important for estimation tab
+        "detections": detections,
+        "model_name": model_name,
+        "estimated_yield_kg": predicted_yield_kg,
+        "price": forecasting.current_price,
+        "revenue": forecasting.revenue_estimate,
+        "size": quality.avg_size,
+        "ripeness": quality.ripeness,
+        "harvest_date": quality.harvest_date,
+        # Enhanced fields
+        "enhanced_quality": {
+            "grade": quality.grade,
+            "export_ready_percentage": quality.export_ready_percentage,
+            "defect_rate": quality.defect_rate,
+            "size_distribution": quality.size_distribution,
+            "ripeness_score": quality.ripeness_score,
+            "shelf_life_days": quality.shelf_life_days
+        },
+        "enhanced_pricing": {
+            "price_7d": forecasting.predicted_price_7d,
+            "price_30d": forecasting.predicted_price_30d,
+            "market_trend": forecasting.market_trend,
+            "supply_demand_ratio": forecasting.supply_demand_ratio,
+            "price_volatility": forecasting.price_volatility,
+            "confidence_score": forecasting.confidence_score
+        }
     })
-
 """
 Author: Huong TA
 Date: 2025-07-20
