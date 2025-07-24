@@ -32,3 +32,5 @@ if img_data is not None:
     boxed_img = results[0].plot()
     count = len(results[0].boxes)
     st.image(boxed_img, caption=f"✅ {count} fruits detected", use_container_width=True)
+    # Force commit: webcam logic included in webcam-preview branch
+

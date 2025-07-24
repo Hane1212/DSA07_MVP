@@ -121,3 +121,4 @@ def save_detection_api(result, model_name):
     response = requests.post(f"{LOCAL_HOST}/save", json=payload)
     response.raise_for_status()
     return response.json()
+# Temp edit to force Git update
