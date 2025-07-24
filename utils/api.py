@@ -17,6 +17,7 @@ from torchvision.models.detection import (
     FasterRCNN_ResNet50_FPN_Weights
 )
 from torchvision.transforms import functional as F # For image preprocessing
+from fastapi.middleware.cors import CORSMiddleware # Import CORSMiddleware
 
 # Import the simulated authentication utilities
 from utils import auth_utils
@@ -27,6 +28,16 @@ fastapi_app = FastAPI(
     description="API for detecting fruits using YOLO and CNN models with authentication.",
     version="1.0.0"
 )
+
+# --- CORS Configuration ---
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (for development/demo)
+    allow_credentials=True,
+    allow_methods=["*"],  # This implicitly includes OPTIONS, but explicitly listing is clearer
+    allow_headers=["*"],
+)
+
 
 # --- Pydantic Models for Authentication ---
 class UserCreate(BaseModel):
@@ -148,7 +159,7 @@ def load_cnn_resnet50_model():
             cnn_resnet50_model = None 
     return cnn_resnet50_model
 
-# --- Model Prediction Functions ---
+# --- Model Prediction Functions (MOVED TO TOP) ---
 
 def predict_yolo(yolo_model_instance: YOLO, model_name_key: str, image: Image.Image) -> List[Dict[str, Union[str, float, List[float]]]]:
     """
@@ -225,6 +236,7 @@ def predict_cnn_resnet50(image: Image.Image, score_threshold: float = 0.2) -> Li
         print(f"ERROR during CNN prediction: {e}")
         print(f"Detailed CNN prediction error: {e.__class__.__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"CNN prediction failed: {e}")
+
 
 # --- Authentication Dependencies ---
 def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPayload:
@@ -355,7 +367,7 @@ async def predict_image(
             except HTTPException as e:
                 results["YOLOv10l_error"] = str(e.detail)
             except Exception as e:
-                results["YOLOv10l_error"] = f"YOLOv10l prediction failed: {e}"
+                results["Yolo10l_error"] = f"YOLOv10l prediction failed: {e}"
                 print(f"YOLOv10l prediction error: {e}")
         elif model_name == "FasterRCNN":
             try:
