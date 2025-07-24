@@ -3,8 +3,12 @@ try:
     import plotly.graph_objects as go
     import plotly.express as px
     from datetime import datetime, timedelta
+    from utils.enhanced_quality import ExportQualityAssessment
+    from utils.enhanced_pricing import PriceForecastingSystem
+    from utils.enhanced_dashboard import create_quality_dashboard, create_price_dashboard
 except ImportError as e:
     print(f"Dashboard dependencies not available: {e}")
+
 
 def create_quality_dashboard(quality):
     """Create export quality dashboard"""
@@ -155,3 +159,148 @@ def create_price_dashboard(forecasting, crop_name: str):
             st.warning("🟡 Consider early harvest or storage")
         else:
             st.info("🔵 Current timing seems optimal")
+
+def enhanced_results_display(ENHANCED_MODULES_AVAILABLE):
+    if ENHANCED_MODULES_AVAILABLE and 'enhanced_quality_result' in st.session_state:
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("📊 Latest Analysis")
+        quality = st.session_state.enhanced_quality_result
+        price = st.session_state.enhanced_price_result
+        
+        st.sidebar.metric("Quality Grade", quality.grade.split()[0])
+        st.sidebar.metric("Export Ready", f"{quality.export_ready_percentage:.1f}%")
+        st.sidebar.metric("Current Price", f"₹{price.current_price:.2f}/kg")
+        st.sidebar.metric("Revenue Est.", f"₹{price.revenue_estimate:,.0f}")
+
+def enhanced_analysis(ENHANCED_MODULES_AVAILABLE, tab_enhanced):
+    if ENHANCED_MODULES_AVAILABLE:
+        with tab_enhanced:
+            st.header("🏆 Enhanced Export Quality & Price Forecasting")
+            
+            # Initialize systems
+            if 'quality_assessor' not in st.session_state:
+                st.session_state.quality_assessor = ExportQualityAssessment()
+            if 'price_forecaster' not in st.session_state:
+                st.session_state.price_forecaster = PriceForecastingSystem()
+            
+            # Use existing detection results if available
+            if 'latest_detection_result' in st.session_state:
+                result = st.session_state.latest_detection_result
+                detections = result.get("detections", [])
+                
+                if detections:
+                    st.success(f"✅ Found {len(detections)} detections from previous analysis")
+                    
+                    # Get image path
+                    image_path = result.get("image_path", "")
+                    
+                    # Crop selection
+                    crop_name = st.selectbox("Select Crop Type", 
+                        ["Apple", "Mango", "Orange", "Banana", "Grapes"], 
+                        key="enhanced_crop_select")
+                    
+                    # Analysis settings
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        avg_weight_grams = st.number_input("Average fruit weight (grams)", 
+                                                        min_value=50, max_value=500, value=150)
+                    with col2:
+                        quality_threshold = st.slider("Quality threshold", 0.0, 1.0, 0.7, 0.1)
+                    
+                    if st.button("🚀 Run Enhanced Analysis", type="primary"):
+                        with st.spinner("Performing enhanced analysis..."):
+                            try:
+                                # Quality assessment
+                                quality = st.session_state.quality_assessor.assess_export_quality(
+                                    detections, image_path
+                                )
+                                
+                                # Calculate yield
+                                estimated_yield_kg = (quality.fruit_count * avg_weight_grams) / 1000
+                                
+                                # Price forecasting  
+                                forecasting = st.session_state.price_forecaster.forecast_prices(
+                                    crop_name, estimated_yield_kg, quality.grade
+                                )
+                                
+                                # Display dashboards
+                                st.markdown("---")
+                                create_quality_dashboard(quality)
+                                st.markdown("---")
+                                create_price_dashboard(forecasting, crop_name)
+                                
+                                # Store results for future reference
+                                st.session_state.enhanced_quality_result = quality
+                                st.session_state.enhanced_price_result = forecasting
+                                
+                                # Action recommendations
+                                st.markdown("---")
+                                st.subheader("💡 Action Recommendations")
+                                
+                                # Generate recommendations based on results
+                                recommendations = []
+                                
+                                if quality.export_ready_percentage >= 85:
+                                    recommendations.append("🌟 **Premium Quality**: Ready for premium export markets")
+                                elif quality.export_ready_percentage >= 70:
+                                    recommendations.append("✅ **Good Quality**: Suitable for standard export")
+                                else:
+                                    recommendations.append("⚠️ **Quality Concerns**: Consider additional processing")
+                                
+                                if forecasting.market_trend == "Upward":
+                                    recommendations.append("📈 **Price Trending Up**: Consider delaying harvest if possible")
+                                elif forecasting.market_trend == "Downward":
+                                    recommendations.append("📉 **Price Declining**: Harvest and sell quickly")
+                                else:
+                                    recommendations.append("📊 **Stable Prices**: Normal harvest timing recommended")
+                                
+                                if quality.shelf_life_days < 7:
+                                    recommendations.append("⏰ **Short Shelf Life**: Prioritize immediate processing")
+                                
+                                for rec in recommendations:
+                                    st.info(rec)
+                                    
+                            except Exception as e:
+                                st.error(f"Error during enhanced analysis: {str(e)}")
+                                st.error("Please check your detection results and try again.")
+                else:
+                    st.info("👆 Please run fruit detection first to enable enhanced analysis")
+                    st.markdown("### How to use Enhanced Analysis:")
+                    st.markdown("""
+                    1. Go to the **Detection** tab
+                    2. Upload an image and run fruit detection
+                    3. Return to this tab for detailed quality and price analysis
+                    """)
+            else:
+                st.info("👆 Please run fruit detection first to enable enhanced analysis")
+                
+                # Show sample analysis for demonstration
+                if st.button("🎯 Show Demo Analysis"):
+                    st.markdown("---")
+                    st.subheader("📊 Demo Analysis Results")
+                    
+                    # Create sample data
+                    sample_detections = [
+                        {"label": "apple", "score": 0.95, "box": [100, 100, 200, 200]},
+                        {"label": "apple", "score": 0.87, "box": [250, 150, 350, 250]},
+                        {"label": "apple", "score": 0.92, "box": [400, 120, 500, 220]}
+                    ]
+                    
+                    try:
+                        # Demo quality assessment
+                        quality = st.session_state.quality_assessor.assess_export_quality(
+                            sample_detections, ""
+                        )
+                        
+                        # Demo price forecasting
+                        forecasting = st.session_state.price_forecaster.forecast_prices(
+                            "Apple", 1.5, quality.grade
+                        )
+                        
+                        create_quality_dashboard(quality)
+                        st.markdown("---")
+                        create_price_dashboard(forecasting, "Apple")
+                        
+                    except Exception as e:
+                        st.error(f"Demo analysis error: {str(e)}")
+    
