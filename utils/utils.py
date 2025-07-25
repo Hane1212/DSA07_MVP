@@ -4,26 +4,55 @@ import pandas as pd
 import os
 from datetime import datetime
 from fpdf import FPDF
+import csv
 
 LOCAL_HOST = "http://fastapi:8000/"  # Optional if using FastAPI backend
 
 # ---------------- SAVE TO CSV ----------------
 
-def save_to_csv(result, model_name, file_path="history.csv"):
+def save_to_csv(*args, file_path="history.csv"):
+    """
+    Supports:
+    1. save_to_csv(result_dict, model_name)
+       where result_dict = {image_id, image_path, fruit_count, corrected_count?, boxed_path}
+    2. save_to_csv(image_id, image_path, predicted_count, corrected_count, model_name, boxed_path)
+    """
+    # Handle new detailed 6-argument call
+    if len(args) == 6:
+        image_id, image_path, predicted_count, corrected_count, model_used, boxed_path = args
+    # Handle old dict-style call
+    elif len(args) == 2:
+        result, model_name = args
+        image_id = result["image_id"]
+        image_path = result["image_path"]
+        boxed_path = result.get("boxed_path", "")
+        predicted_count = result["fruit_count"]
+        corrected_count = result.get("corrected_count", predicted_count)
+        model_used = model_name
+    else:
+        raise ValueError(
+            "save_to_csv: expected 6 arguments (detailed) or 2 arguments (result, model_name)"
+        )
+
     row = {
-        "image_id": result["image_id"],
-        "image_path": result["image_path"],
-        "boxed_path": result.get("boxed_path", ""),
-        "predicted_count": result["fruit_count"],
-        "corrected_count": result.get("corrected_count", result["fruit_count"]),
-        "model_used": model_name,
+        "image_id": image_id,
+        "image_path": image_path,
+        "boxed_path": boxed_path,
+        "predicted_count": predicted_count,
+        "corrected_count": corrected_count,
+        "model_used": model_used,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
+    # Append to CSV
     if os.path.exists(file_path):
         df = pd.read_csv(file_path)
         df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-        df.drop_duplicates(subset=["image_id", "predicted_count", "corrected_count", "model_used"], keep="last", inplace=True)
+        df.drop_duplicates(
+            subset=["image_id", "predicted_count", "corrected_count", "model_used"],
+            keep="last",
+            inplace=True,
+        )
     else:
         df = pd.DataFrame([row])
 
@@ -32,7 +61,7 @@ def save_to_csv(result, model_name, file_path="history.csv"):
 
 # ---------------- SHOW HISTORY ----------------
 
-def show_detection_history(csv_path="history.csv"):
+def show_history(csv_path="history.csv"):
     if os.path.exists(csv_path):
         df = pd.read_csv(csv_path)
         if df.empty:
@@ -65,30 +94,34 @@ def generate_pdf_from_csv(csv_path="history.csv", output_path="correction_report
         model = str(row.get("model_used", "N/A"))
         timestamp = str(row.get("timestamp", "N/A"))
 
-        # Cropped Image
+        # Original image
         if image_path and image_path.lower() != "nan" and os.path.exists(image_path):
             try:
                 pdf.image(image_path, x=10, w=60)
             except Exception as e:
                 pdf.cell(0, 10, f"[Image Error: {e}]", ln=True)
 
-        # YOLO Output with Bounding Boxes
+        # YOLO boxed image
         if boxed_path and boxed_path.lower() != "nan" and os.path.exists(boxed_path):
             try:
                 pdf.image(boxed_path, x=75, w=60)
             except Exception as e:
                 pdf.cell(0, 10, f"[Boxed Image Error: {e}]", ln=True)
 
-        # Text Section
+        # Text info
         pdf.set_font("Arial", size=10)
         pdf.ln(3)
-        pdf.multi_cell(0, 10, txt=(
-            f"Image: {image_id}\n"
-            f"Predicted Count: {predicted}\n"
-            f"Corrected Count: {corrected}\n"
-            f"Model: {model}\n"
-            f"Timestamp: {timestamp}"
-        ))
+        pdf.multi_cell(
+            0,
+            10,
+            txt=(
+                f"Image: {image_id}\n"
+                f"Predicted Count: {predicted}\n"
+                f"Corrected Count: {corrected}\n"
+                f"Model: {model}\n"
+                f"Timestamp: {timestamp}"
+            ),
+        )
         pdf.ln(10)
 
     pdf.output(output_path)
@@ -115,10 +148,9 @@ def save_detection_api(result, model_name):
         "num_objects_model": result["fruit_count"],
         "num_objects_corrected": result.get("corrected_count", result["fruit_count"]),
         "annotated_by_user": True,
-        "annotator_id": None
+        "annotator_id": None,
     }
 
     response = requests.post(f"{LOCAL_HOST}/save", json=payload)
     response.raise_for_status()
     return response.json()
-# Temp edit to force Git update
