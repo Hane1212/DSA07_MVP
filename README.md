@@ -30,6 +30,8 @@ Allow User ask chatbot about agriculture field, using API from **gemini-2.5-pro*
 - Estimate total yield (kg) and market revenue (₹)
 
 ### Enhanced Analysis
+In the Enhanced Analysis tab, I’ve integrated real-time APIs and AI-based logic to give farmers a complete post-detection report. It calculates fruit size, ripeness, defect rate, and even estimates the harvest date using image data. On top of that, it forecasts market prices and revenue using the AgMarknet API and seasonal patterns. This gives users not just a count, but a real business insight—how much they’ll earn and when to harvest. It’s designed to support smarter decision-making right after detection.
+
 ---
 ## Compare page
 The Compare Model page lets users view the performance of different YOLO versions (v9, v10m,v10l,RCNN) side by side. It shows key metrics like accuracy, precision, and  recall, making it easier to choose the right model for specific needs. Users can upload an image and instantly compare how each model detects fruits, including confidence scores and bounding boxes.  After comparison, users can download the results for both images with detections and the summary report.
