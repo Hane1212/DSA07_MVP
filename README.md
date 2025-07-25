@@ -29,8 +29,10 @@ Allow User ask chatbot about agriculture field, using API from **gemini-2.5-pro*
 - Fetch real-time crop prices (Agmarknet API - India)
 - Estimate total yield (kg) and market revenue (₹)
 
+### Enhanced Analysis
+---
 ## Compare page
-
+The Compare Model page lets users view the performance of different YOLO versions (v9, v10m,v10l,RCNN) side by side. It shows key metrics like accuracy, precision, and  recall, making it easier to choose the right model for specific needs. Users can upload an image and instantly compare how each model detects fruits, including confidence scores and bounding boxes.  After comparison, users can download the results for both images with detections and the summary report.
 
 ---
 
@@ -43,21 +45,26 @@ Allow User ask chatbot about agriculture field, using API from **gemini-2.5-pro*
 ---
 ## ProsgessSQL db
 **table: ImageDetection**
-| Column Name             | Data Type  | Description                           | Constraints / Notes                   |
-| ----------------------- | ---------- | ------------------------------------- | ------------------------------------- |
-| `id`                    | `Integer`  | Primary key                           | `primary_key=True`, `index=True`      |
-| `image_id`              | `String`   | Image file name or ID                 | `nullable=False`                      |
-| `image_path`            | `String`   | File path of the annotated image      | `nullable=False`                      |
-| `model_name`            | `String`   | Detection model used                  | `nullable=False`                      |
-| `detection_time`        | `Float`    | Time taken for detection (seconds)    |                                       |
-| `confidence`            | `Float`    | Average model confidence              |                                       |
-| `model_predictions`     | `JSON`     | Original bounding boxes from model    | Stored as raw prediction data         |
-| `user_annotations`      | `JSON`     | User-corrected bounding boxes         | Stored if user edits results          |
-| `num_objects_model`     | `Integer`  | Count of objects detected by model    |                                       |
-| `num_objects_corrected` | `Integer`  | Manually corrected fruit count        |                                       |
-| `annotated_by_user`     | `Boolean`  | Flag indicating if manually corrected | Default: `False`                      |
-| `annotator_id`          | `String`   | ID of user who edited results         | Optional (`nullable=True`)            |
-| `annotation_date`       | `DateTime` | When annotation was made              | Default: `now()` via `server_default` |
+
+The app stores all detection and correction metadata in a local or cloud-connected database. Each record corresponds to one processed image.
+
+| Column                | Type      | Description                                      |
+|-----------------------|-----------|--------------------------------------------------|
+| `image_id`            | String    | Unique ID or filename of the image              |
+| `image_path`          | String    | Path to saved annotated image                   |
+| `model_name`          | String    | Detection model used (e.g., YOLOv10m)           |
+| `detection_time`      | Float     | Time taken for model inference (in seconds)     |
+| `confidence`          | Float     | Average model confidence score                  |
+| `model_predictions`   | JSON      | Raw bounding boxes predicted by the model       |
+| `user_annotations`    | JSON      | User-corrected annotations (optional)           |
+| `num_objects_model`   | Integer   | Number of fruits detected by the model          |
+| `num_objects_corrected` | Integer | Manually corrected fruit count                  |
+| `annotated_by_user`   | Boolean   | Whether the result was manually corrected       |
+| `annotator_id`        | String    | User ID of annotator (if any)                   |
+| `annotation_date`     | DateTime  | Timestamp when annotation was saved             |
+
+> All detections can be browsed in the "History / Logs" tab in the app.
+
 
 ---
 
